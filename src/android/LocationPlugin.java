@@ -11,8 +11,10 @@ import android.content.pm.PackageManager;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationManager;
+import android.location.LocationListener;
 import android.support.v4.app.ActivityCompat;
 import android.util.Log;
+import android.os.Bundle;
 
 import java.util.List;
 
@@ -20,7 +22,7 @@ import java.util.List;
 public class LocationPlugin extends CordovaPlugin {
 
     @Override
-    public boolean execute(String action, JSONArray data, CallbackContext callbackContext) throws JSONException {
+    public boolean execute(String action, JSONArray data, CallbackContext callbackContext) {
       if (ActivityCompat.checkSelfPermission(this.webView.getContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this.webView.getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
           callbackContext.error("PERMISSION_DENIED please add the manifest permission ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION");
       }
@@ -32,68 +34,72 @@ public class LocationPlugin extends CordovaPlugin {
           this.getLocation(callbackContext);
           return true;
       }
+        callbackContext.error("Action not fround " + action);
         return false;
     }
 
-    protected void getLastKnownLocation(CallbackContext callbackContext) throws JSONException {
-        LocationManager locationManager = (LocationManager) this.webView.getContext().getSystemService(Context.LOCATION_SERVICE);
-        String provider = locationManager.getBestProvider(new Criteria(), false);
-        List<String> providers = locationManager.getProviders(true);
 
-        for (String prov : providers) {
-            Log.d(getClass().getSimpleName(), "showCurrentLocation: " + prov);
+    private static void returnLocation(Location location, final CallbackContext callbackContext) {
+        final JSONObject obj = new JSONObject();
+        try {
+            obj.put("lat", location.getLatitude());
+            obj.put("long", location.getLongitude());
+            obj.put("time", location.getTime());
+            obj.put("provider", location.getProvider());
+        } catch(JSONException e) {
+            callbackContext.error(e.getMessage());
+            return;
         }
+        callbackContext.success(obj);
+    }
+
+    protected void getLastKnownLocation(final CallbackContext callbackContext) {
+        final LocationManager locationManager = (LocationManager) this.webView.getContext().getSystemService(Context.LOCATION_SERVICE);
+        final String provider = locationManager.getBestProvider(new Criteria(), false);
 
         if (provider != null) {
-
-
-            Location location = locationManager.getLastKnownLocation(provider);
+            final Location location = locationManager.getLastKnownLocation(provider);
             System.out.println("--------------in locationManager");
 
             if (location != null) {
-                String message = String.format("Current Location", location.getLongitude(), location.getLatitude());
+                final String message = String.format("Current Location", location.getLongitude(), location.getLatitude());
                 System.out.println("--------------in showCurrenenter code heretLocation---" + message);
-                JSONObject obj = new JSONObject();
-                obj.put("lat", location.getLatitude());
-                obj.put("long", location.getLongitude());
-                obj.put("time", location.getTime());
-                obj.put("provider", location.getProvider());
-                callbackContext.success(obj);
-
+                returnLocation(location, callbackContext);
             } else {
                 System.out.println("in showCurrentLocation error");
                 callbackContext.error("Unable to get location.");
             }
+        } else {
+            callbackContext.error("Unable to get provider.");
         }
     }
 
-    protected void getLastKnownLocation(CallbackContext callbackContext) throws JSONException {
-        LocationManager locationManager = (LocationManager) this.webView.getContext().getSystemService(Context.LOCATION_SERVICE);
-        String provider = locationManager.getBestProvider(new Criteria(), false);
-        List<String> providers = locationManager.getProviders(true);
-
-        for (String prov : providers) {
-            Log.d(getClass().getSimpleName(), "showCurrentLocation: " + prov);
-        }
-
+    
+    protected void getLocation(final CallbackContext callbackContext) {
+        final LocationManager locationManager = (LocationManager) this.webView.getContext().getSystemService(Context.LOCATION_SERVICE);
+        final String provider = locationManager.getBestProvider(new Criteria(), false);
+        
         if (provider != null) {
-            Location location = locationManager.getLocation(provider);
-            System.out.println("--------------in locationManager");
+            // Define a listener that responds to location updates
+            final LocationListener locationListener = new LocationListener() {
+                @Override
+                public void onLocationChanged(final Location location) {
+                    returnLocation(location, callbackContext);
+                }
 
-            if (location != null) {
-                String message = String.format("Current Location", location.getLongitude(), location.getLatitude());
-                System.out.println("--------------in showCurrenenter code heretLocation---" + message);
-                JSONObject obj = new JSONObject();
-                obj.put("lat", location.getLatitude());
-                obj.put("long", location.getLongitude());
-                obj.put("time", location.getTime());
-                obj.put("provider", location.getProvider());
-                callbackContext.success(obj);
+                @Override
+                public void onStatusChanged(String provider, int status, Bundle extras) {}
 
-            } else {
-                System.out.println("in showCurrentLocation error");
-                callbackContext.error("Unable to get location.");
-            }
+                @Override
+                public void onProviderEnabled(String provider) {}
+
+                @Override
+                public void onProviderDisabled(String provider) {}
+            };
+            // Register the listener with the Location Manager to receive location updates
+            locationManager.requestSingleUpdate(provider, locationListener, null);
+        } else {
+            callbackContext.error("Unable to get provider.");
         }
     }
 
